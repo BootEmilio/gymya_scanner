@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'qr_scanner_screen.dart'; // Importa la pantalla de escaneo de QR
+import 'gym_selection_screen.dart'; // Importa la pantalla de selección de gimnasio
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -16,8 +16,13 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   Future<void> _login() async {
-    final username = _usernameController.text;
-    final password = _passwordController.text;
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (username.isEmpty || password.isEmpty) {
+      _showErrorDialog('Por favor, completa todos los campos.');
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -39,16 +44,22 @@ class _LoginScreenState extends State<LoginScreen> {
         final data = jsonDecode(response.body);
         final token = data['token'];
 
-        // Guardar el token en almacenamiento seguro
-        await _storage.write(key: 'token', value: token);
+        // Acceder a gym_id dentro del objeto admin
+        final gymIds = data['admin']['gym_id'] as List<dynamic>? ?? [];
 
-        // Navegar a la pantalla de escaneo de QR
+        // Navegar a la pantalla de selección de gimnasio
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => QRScannerScreen()),
+          MaterialPageRoute(
+            builder: (context) => GymSelectionScreen(
+              gymIds: gymIds.cast<String>(), // Pasar la lista de gymIds
+            ),
+          ),
         );
+      } else if (response.statusCode == 401) {
+        _showErrorDialog('Usuario o contraseña incorrectos.');
       } else {
-        _showErrorDialog('Login fallido: ${response.statusCode}');
+        _showErrorDialog('Error inesperado: ${response.statusCode}');
       }
     } catch (e) {
       _showErrorDialog('Error de conexión: $e');
@@ -88,20 +99,25 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             TextField(
               controller: _usernameController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(labelText: 'username'),
+              decoration: InputDecoration(
+                labelText: 'Usuario',
+                hintText: 'Ingresa tu nombre de usuario',
+              ),
             ),
             SizedBox(height: 16),
             TextField(
               controller: _passwordController,
               obscureText: true,
-              decoration: InputDecoration(labelText: 'Contraseña'),
+              decoration: InputDecoration(
+                labelText: 'Contraseña',
+                hintText: 'Ingresa tu contraseña',
+              ),
             ),
             SizedBox(height: 24),
             _isLoading
                 ? CircularProgressIndicator()
                 : ElevatedButton(
-                    onPressed: _login,
+                    onPressed: _isLoading ? null : _login,
                     child: Text('Iniciar sesión'),
                   ),
           ],
