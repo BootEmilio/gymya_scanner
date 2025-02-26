@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:barcode_scan2/barcode_scan2.dart';  // Para escanear códigos QR
+import 'package:barcode_scan2/barcode_scan2.dart';
 import 'package:http/http.dart' as http;           // Para hacer solicitudes HTTP
 import 'dart:convert';                             // Para manejar JSON
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';  // Para almacenar el token
@@ -29,6 +29,18 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         return;
       }
 
+      // Obtener el token
+      final token = await _storage.read(key: 'token');
+      print('Token obtenido: $token');  // Depuración
+
+      if (token == null) {
+        setState(() {
+          result = 'No se encontró el token. Inicia sesión nuevamente.';
+        });
+        Navigator.pushReplacementNamed(context, '/login'); // Redirigir al login
+        return;
+      }
+
       // Inicia el escáner de QR
       final scanResult = await BarcodeScanner.scan();
       print('Valor escaneado: ${scanResult.rawContent}'); // Depuración
@@ -49,17 +61,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
           print('membresia_id: $membresiaId'); // Depuración
           print('plan_id: $planId'); // Depuración
-
-          // Obtener el token guardado
-          final token = await _storage.read(key: 'token');
-          print('Token obtenido: $token');  // Depuración
-
-          if (token == null) {
-            setState(() {
-              result = 'No se encontró el token. Inicia sesión nuevamente.';
-            });
-            return;
-          }
 
           // Obtener la fecha y hora actual
           final fechaHora = DateTime.now().toUtc().toIso8601String();
@@ -125,6 +126,11 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         setState(() {
           result = responseData['message'] ?? 'Asistencia registrada correctamente';
         });
+      } else if (response.statusCode == 401) {
+        setState(() {
+          result = 'Token inválido o expirado. Inicia sesión nuevamente.';
+        });
+        Navigator.pushReplacementNamed(context, '/login'); // Redirigir al login
       } else {
         final errorData = jsonDecode(response.body);
         setState(() {
