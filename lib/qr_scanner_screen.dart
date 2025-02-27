@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:barcode_scan2/barcode_scan2.dart';
-import 'package:http/http.dart' as http;           // Para hacer solicitudes HTTP
-import 'dart:convert';                             // Para manejar JSON
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';  // Para almacenar el token
+import 'dart:convert';
+import 'package:gymya_scanner/Funciones/registrarAsistencias.dart';
 
 class QRScannerScreen extends StatefulWidget {
+  final String token;
+  final Map<String, dynamic> user;
+  final String gimnasioId;
+
+  QRScannerScreen({super.key, required this.token, required this.user, required this.gimnasioId});
+
   @override
   _QRScannerScreenState createState() => _QRScannerScreenState();
 }
 
 class _QRScannerScreenState extends State<QRScannerScreen> {
   String result = 'Escanea un código QR';  // Mensaje para mostrar el resultado
-  final _storage = FlutterSecureStorage(); // Almacenamiento seguro para el token y el gymId
   bool _isLoading = false;
 
   Future<void> scanQR() async {
@@ -20,42 +24,28 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     });
 
     try {
-      // Obtener el gymId seleccionado
-      final selectedGymId = await _storage.read(key: 'selectedGymId');
-      if (selectedGymId == null) {
-        setState(() {
-          result = 'No se ha seleccionado un gimnasio.';
-        });
-        return;
-      }
-
-      // Obtener el token
-      final token = await _storage.read(key: 'token');
-      print('Token obtenido: $token');  // Depuración
-
-      if (token == null) {
-        setState(() {
-          result = 'No se encontró el token. Inicia sesión nuevamente.';
-        });
-        Navigator.pushReplacementNamed(context, '/login'); // Redirigir al login
-        return;
-      }
-
       // Inicia el escáner de QR
       final scanResult = await BarcodeScanner.scan();
-      print('Valor escaneado: ${scanResult.rawContent}'); // Depuración
+      print('Valor escaneado (raw): "${scanResult.rawContent}"'); // Depuración detallada
+
+      // Recorta espacios en blanco y nuevos saltos de línea alrededor del contenido
+      final trimmedContent = scanResult.rawContent.trim();
+      print('Valor escaneado (trimmed): "$trimmedContent"'); // Depuración detallada
 
       // Verifica si se escaneó un código QR válido
-      if (scanResult.rawContent.isNotEmpty) {
+      if (trimmedContent.isNotEmpty) {
         try {
           // Parsear el JSON escaneado
-          final jsonData = jsonDecode(scanResult.rawContent);
+          final jsonData = jsonDecode(trimmedContent);
+          print('Datos del JSON: $jsonData');  // Verifica que el JSON sea correcto
+
           if (jsonData['membresia_id'] == null || jsonData['plan_id'] == null) {
             setState(() {
               result = 'Código QR no válido: falta membresia_id o plan_id';
             });
             return;
           }
+
           final membresiaId = jsonData['membresia_id'];
           final planId = jsonData['plan_id'];
 
@@ -66,12 +56,26 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           final fechaHora = DateTime.now().toUtc().toIso8601String();
           print('Fecha y hora actual: $fechaHora');  // Depuración
 
+          // Crear una instancia de RegistrarAsistencias con membresiaId y enviar la solicitud
+          final registrarasistencias = RegistrarAsistencias(
+            token: widget.token,
+            gimnasioId: widget.gimnasioId,
+            membresiaId: membresiaId,  // Pasa el membresiaId aquí
+            fechaHora: fechaHora,
+          );
+
           // Enviar datos al servidor para registrar la asistencia
-          await registrarAsistencia(selectedGymId, membresiaId, planId, fechaHora, token);
+          await registrarasistencias.registrarAsistencias();
+
+          setState(() {
+            result = 'Asistencia registrada correctamente';
+          });
+
         } catch (e) {
           setState(() {
             result = 'Código QR no válido: no es un JSON correcto';
           });
+          print('Error al parsear JSON: $e');  // Depuración de errores
           return;
         }
       } else {
@@ -88,60 +92,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       setState(() {
         _isLoading = false;
       });
-    }
-  }
-
-  // Método para registrar la asistencia
-  Future<void> registrarAsistencia(String gymId, String membresiaId, String planId, String fechaHora, String token) async {
-    try {
-      // Construir la URL de la API con el gymId
-      final url = 'https://api-gymya-api.onrender.com/api/$gymId/nuevaAsistencia';
-
-      // Datos a enviar
-      final body = {
-        'membresia_id': membresiaId,
-        'plan_id': planId,
-        'fecha_hora': fechaHora,
-      };
-
-      // Depuración: Imprimir datos enviados
-      print('Datos enviados al servidor:');
-      print(jsonEncode(body));
-
-      // Hacer la solicitud POST a la API
-      final response = await http.post(
-        Uri.parse(url),  // URL dinámica con el gymId
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token', // Incluir el token en el encabezado
-        },
-        body: jsonEncode(body),
-      );
-
-      // Verificar la respuesta del servidor
-      print('Respuesta de la API: ${response.body}');  // Depuración
-
-      if (response.statusCode == 201) {
-        final responseData = jsonDecode(response.body);
-        setState(() {
-          result = responseData['message'] ?? 'Asistencia registrada correctamente';
-        });
-      } else if (response.statusCode == 401) {
-        setState(() {
-          result = 'Token inválido o expirado. Inicia sesión nuevamente.';
-        });
-        Navigator.pushReplacementNamed(context, '/login'); // Redirigir al login
-      } else {
-        final errorData = jsonDecode(response.body);
-        setState(() {
-          result = 'Error: ${errorData['error']} (Código: ${response.statusCode})';
-        });
-      }
-    } catch (e) {
-      setState(() {
-        result = 'Error de conexión: $e';
-      });
-      print('Error en la solicitud POST: $e');  // Depuración
     }
   }
 

@@ -1,25 +1,81 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'gym_selection_screen.dart'; // Importa la pantalla de selección de gimnasio
+import 'dart:ui' as ui; // Importar 'dart:ui' con el alias 'ui'
+import 'gimnasios/gimnasios.dart'; // Importa la pantalla de selección de gimnasio
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
   @override
   _LoginScreenState createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   final _storage = FlutterSecureStorage();
   bool _isLoading = false;
+  bool _rememberMe = false;
+  bool _showPassword = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCredentials();
+  }
+
+  Future<void> _loadSavedCredentials() async {
+    try {
+      final savedUsername = await _storage.read(key: 'saved_username');
+      final savedPassword = await _storage.read(key: 'saved_password');
+      final rememberMe = await _storage.read(key: 'remember_me');
+
+      if (savedUsername != null && savedPassword != null && rememberMe == 'true') {
+        setState(() {
+          _usernameController.text = savedUsername;
+          _passwordController.text = savedPassword;
+          _rememberMe = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading saved credentials: $e');
+    }
+  }
+
+  Future<void> _saveCredentials() async {
+    if (_rememberMe) {
+      await _storage.write(key: 'saved_username', value: _usernameController.text);
+      await _storage.write(key: 'saved_password', value: _passwordController.text);
+      await _storage.write(key: 'remember_me', value: 'true');
+    } else {
+      await _storage.delete(key: 'saved_username');
+      await _storage.delete(key: 'saved_password');
+      await _storage.delete(key: 'remember_me');
+    }
+  }  
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _login() async {
-    final username = _usernameController.text.trim();
-    final password = _passwordController.text.trim();
-
-    if (username.isEmpty || password.isEmpty) {
+    if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
       _showErrorDialog('Por favor, completa todos los campos.');
       return;
     }
@@ -31,61 +87,43 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final response = await http.post(
         Uri.parse('https://api-gymya-api.onrender.com/api/Admin/login'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'username': username,
-          'password': password,
+          'username': _usernameController.text,
+          'password': _passwordController.text,
         }),
       );
 
+      if(!mounted) return;
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final token = data['token'];
+        final String token = data['token'];
+        final admin = data['admin'];
 
-        // Acceder a gym_id dentro del objeto admin
-        final gymIds = data['admin']['gym_id'] as List<dynamic>? ?? [];
+        await _storage.write(key: 'token', value: token);
+        await _saveCredentials();
 
-        // Navegar a la pantalla de selección de gimnasio
+        if(!mounted) return;
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => GymSelectionScreen(
-              gymIds: gymIds.cast<String>(), // Pasar la lista de gymIds
-            ),
+            builder: (context) => GymSelectionScreen(token: token, admin: admin),
           ),
         );
-      } else if (response.statusCode == 401) {
-        _showErrorDialog('Usuario o contraseña incorrectos.');
       } else {
-        _showErrorDialog('Error inesperado: ${response.statusCode}');
+        _showErrorDialog('Usuario o contraseña incorrectos.');
       }
     } catch (e) {
       _showErrorDialog('Error de conexión: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
-  }
-
-  void _showErrorDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Error'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-            },
-            child: Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
