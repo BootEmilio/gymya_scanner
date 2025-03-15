@@ -30,11 +30,8 @@ class RegistrarAsistencias {
 
       final membresiaId = jsonData['membresia_id'];
 
-      // Obtener la fecha y hora actual
-      final fechaHora = DateTime.now().toUtc().toIso8601String();
-
       // Llamada a la API para registrar la asistencia
-      return await registrarAsistencias(membresiaId, fechaHora);
+      return await registrarAsistencias(membresiaId);
       
     } catch (e) {
       return 'Error al escanear o registrar asistencia: ${e.toString()}';
@@ -42,7 +39,7 @@ class RegistrarAsistencias {
   }
 
   // Método para registrar la asistencia en la API
-  Future<String> registrarAsistencias(String membresiaId, String fechaHora) async {
+  Future<String> registrarAsistencias(String membresiaId) async {
     final response = await http.post(
       Uri.parse('https://api-gymya-api.onrender.com/api/$gimnasioId/nuevaAsistencia'),
       headers: {
@@ -51,7 +48,6 @@ class RegistrarAsistencias {
       },
       body: jsonEncode({
         'membresia_id': membresiaId,
-        'fecha_hora': fechaHora,
       }),
     );
 
