@@ -1,21 +1,48 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:barcode_scan2/barcode_scan2.dart';
 
 class RegistrarAsistencias {
   final String token;
   final String gimnasioId;
-  final String membresiaId;
-  final String fechaHora;
 
   RegistrarAsistencias({
     required this.token,
     required this.gimnasioId,
-    required this.membresiaId,
-    required this.fechaHora,
   });
 
-  // Método para registrar la asistencia
-  Future<Map<String, dynamic>> registrarAsistencias() async {
+  // Método para escanear y registrar la asistencia
+  Future<String> scanAndRegisterAttendance() async {
+    try {
+      // Inicia el escáner de QR
+      final scanResult = await BarcodeScanner.scan();
+      final trimmedContent = scanResult.rawContent.trim();
+
+      if (trimmedContent.isEmpty) {
+        return 'No se encontró un código QR válido';
+      }
+
+      // Parsear el JSON escaneado
+      final jsonData = jsonDecode(trimmedContent);
+      if (jsonData['membresia_id'] == null) {
+        return 'Código QR no válido';
+      }
+
+      final membresiaId = jsonData['membresia_id'];
+
+      // Obtener la fecha y hora actual
+      final fechaHora = DateTime.now().toUtc().toIso8601String();
+
+      // Llamada a la API para registrar la asistencia
+      return await registrarAsistencias(membresiaId, fechaHora);
+      
+    } catch (e) {
+      return 'Error al escanear o registrar asistencia: ${e.toString()}';
+    }
+  }
+
+  // Método para registrar la asistencia en la API
+  Future<String> registrarAsistencias(String membresiaId, String fechaHora) async {
     final response = await http.post(
       Uri.parse('https://api-gymya-api.onrender.com/api/$gimnasioId/nuevaAsistencia'),
       headers: {
@@ -23,26 +50,16 @@ class RegistrarAsistencias {
         'Content-Type': 'application/json',
       },
       body: jsonEncode({
-        'membresia_id': membresiaId, // Incluir el planId en el cuerpo de la solicitud si es necesario
+        'membresia_id': membresiaId,
         'fecha_hora': fechaHora,
       }),
     );
 
-    // Manejar código de éxito 201 (Created)
     if (response.statusCode == 201) {
-      // Decodificar la respuesta en JSON
-      final responseBody = json.decode(response.body);
-
-      // Verificar si la respuesta es un mapa JSON
-      if (responseBody is Map<String, dynamic>) {
-        return responseBody; // Retornar el objeto JSON
-      } else {
-        throw Exception('Formato de respuesta inválido');
-      }
+      return 'Asistencia registrada correctamente';
     } else {
-      // Si no es un código de éxito, lanza una excepción con el mensaje de error
       print('Error en la respuesta: ${response.body}');
-      throw Exception('Error al registrar la asistencia: ${response.statusCode}');
+      return 'Error al registrar la asistencia: ${response.statusCode}';
     }
   }
 }

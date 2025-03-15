@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class GimnasioCard extends StatefulWidget{
+class GimnasioCard extends StatefulWidget {
   final Map<String, dynamic> gimnasio;
   final VoidCallback onTap;
 
@@ -32,6 +32,15 @@ class _GimnasioCardState extends State<GimnasioCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              ClipRRect(
+                child: Image.network(
+                  widget.gimnasio['imagen'] ?? 'https://via.placeholder.com/150', // URL de la imagen o placeholder
+                  width: double.infinity, // Ocupa todo el eje X
+                  height: 150, // Puedes ajustar la altura según el diseño
+                  fit: BoxFit.cover, // Ajusta la imagen al contenedor
+                ),
+              ),
+              SizedBox(height: 8), // Espacio entre la imagen y el contenido
               Text(
                 widget.gimnasio['nombre'] ?? 'Nombre no disponible',
                 style: TextStyle(
@@ -49,7 +58,7 @@ class _GimnasioCardState extends State<GimnasioCard> {
               Text(
                 'Horario: ${widget.gimnasio['horario']}',
                 style: TextStyle(color: Colors.white60),
-              )
+              ),
             ],
           ),
         ),
